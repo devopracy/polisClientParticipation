@@ -1,4 +1,4 @@
-// Copyright (C) 2012-present, Polis Technology Inc. This program is free software: you can redistribute it and/or  modify it under the terms of the GNU Affero General Public License, version 3, as published by the Free Software Foundation. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details. You should have received a copy of the GNU Affero General Public License along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// Copyright (C) 2012-present, The Authors. This program is free software: you can redistribute it and/or  modify it under the terms of the GNU Affero General Public License, version 3, as published by the Free Software Foundation. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details. You should have received a copy of the GNU Affero General Public License along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 var eb = require("../eventBus");
 var Handlebones = require("handlebones");
@@ -11,6 +11,18 @@ var Utils = require("../util/utils");
 var Strings = require("../strings");
 
 var iOS = Utils.isIos();
+
+
+function getOfficialTranslations(translations) {
+  return (translations||[]).filter(function(t) {
+    return t.src > 0;
+  });
+}
+function getMatchingOfficialTranslation(translations) {
+  return getOfficialTranslations(translations).filter(function(t) {
+    return Utils.matchesUiLang(t.lang);
+  })[0];
+}
 
 module.exports = Handlebones.ModelView.extend({
   name: "vote-view",
@@ -97,6 +109,7 @@ module.exports = Handlebones.ModelView.extend({
     if (ctx.showTranslation && ctx.translations && ctx.translations.length) {
       ctx.translationTxt = ctx.translations[0].txt;
       ctx.translationLang = ctx.translations[0].lang;
+      ctx.translationSrc = ctx.translations[0].src;
     }
     if (!ctx.showTranslation && ctx.lang && !Utils.matchesUiLang(ctx.lang) && ctx.translations && ctx.translations.length) {
       ctx.showShowTranslationButton = true;
@@ -104,6 +117,39 @@ module.exports = Handlebones.ModelView.extend({
     if (ctx.showTranslation && ctx.translationTxt && ctx.lang && !Utils.matchesUiLang(ctx.lang) && ctx.translations && ctx.translations.length) {
       ctx.showHideTranslationButton = true;
     }
+
+    var officialTranslation = null;
+    if (ctx.showOfficialTranslation) {
+      // && ctx.translationSrc !== -1) {
+      officialTranslation = getMatchingOfficialTranslation(ctx.translations);
+      ctx.txt = officialTranslation.txt;
+      ctx.lang = officialTranslation.lang;
+    }
+
+    if (officialTranslation) {
+      ctx.isUnofficialTranslation = false;
+      ctx.showTranslationButton = Strings.showTranslationButton;
+    } else if (ctx.translations && ctx.translations.length > 0) {
+      ctx.isUnofficialTranslation = true;
+      ctx.showTranslationButton = Strings.showTranslationButton;
+      ctx.thirdPartyTranslationDisclaimer = Strings.thirdPartyTranslationDisclaimer;
+    }
+    // if comment has correct language don't show translation or buttons
+    if ((ctx.showTranslation || officialTranslation) &&
+        ctx.lang &&
+        Utils.matchesUiLang(ctx.lang)) {
+      ctx.showTranslation = false;
+      delete ctx.translationTxt;
+      delete ctx.translationLang;
+      delete ctx.translationSrc;
+      ctx.showShowTranslationButton = false;
+      ctx.showHideTranslationButton = false;
+    }
+
+    // if (ctx.userHasVotedThisSession) {
+    //   // console.log('showHereIsNextStatement' + this.$el.parent().parent().attr('id'));
+    //   ctx.showHereIsNextStatement = true;
+    // }
 
     var remaining = ctx.remaining;
     if (remaining > 100) {
@@ -119,12 +165,18 @@ module.exports = Handlebones.ModelView.extend({
     this.model.set({
       showTranslation: true,
     });
+    this.serverClient.put_participants_extended({
+      show_translation_activated: true,
+    });
   },
 
   hideTranslationClicked: function(e) {
     e.preventDefault();
     this.model.set({
       showTranslation: false,
+    });
+    this.serverClient.put_participants_extended({
+      show_translation_activated: false,
     });
   },
 
@@ -209,7 +261,7 @@ module.exports = Handlebones.ModelView.extend({
       //alert('cleanup');
       eb.off(eb.exitConv, cleanup);
     }
-    var serverClient = options.serverClient;
+    var serverClient = this.serverClient = options.serverClient;
     var votesByMe = this.votesByMe = options.votesByMe;
     var votesByMeFetched = $.Deferred();
     votesByMeFetched.then(function() {
@@ -250,6 +302,11 @@ module.exports = Handlebones.ModelView.extend({
         empty: false,
         shouldMod: false,
       };
+
+      var t = getMatchingOfficialTranslation(model.translations);
+      if (t) {
+        savedState.showOfficialTranslation = true;
+      }
 
       that.model.clear({
         silent: true
@@ -316,6 +373,11 @@ module.exports = Handlebones.ModelView.extend({
         showEmpty();
       }
       this.animateIn();
+
+      // this.model.set({
+      //   userHasVotedThisSession: true,
+      // });
+      this.$("#hereIsNextStatementLabel").show();
 
       // Fix for stuck hover effects for touch events.
       // Remove when this is fix is accepted
@@ -394,7 +456,7 @@ module.exports = Handlebones.ModelView.extend({
     };
     this.subscribeBtn = function(e) {
       var that = this;
-      var email = this.$(".email").val();
+      var email = this.$(".email").val() || preload.firstUser.email;
       serverClient.convSub({
         type: 1, // 1 for email
         email: email,
@@ -411,6 +473,14 @@ module.exports = Handlebones.ModelView.extend({
       });
       return false;
     };
+    this.getWeight = function() {
+      if ($("#weight_low").prop("checked")) {
+        return -1;
+      } else if ($("#weight_high").prop("checked")) {
+        return 1;
+      }
+      return 0;
+    };
     this.participantAgreed = function(e) {
       this.mostRecentVoteType = "agree";
       var tid = this.model.get("tid");
@@ -421,11 +491,12 @@ module.exports = Handlebones.ModelView.extend({
       this.wipVote = {
         vote: -1,
         conversation_id: conversation_id,
+        weight: this.getWeight(),
         tid: tid
       };
       serverClient.addToVotesByMe(this.wipVote);
       this.onButtonClicked();
-      serverClient.agree(tid, starred)
+      serverClient.agree(tid, starred, this.wipVote.weight)
         .then(onVote.bind(this), onFail.bind(this));
     };
     this.participantDisagreed = function() {
@@ -435,11 +506,12 @@ module.exports = Handlebones.ModelView.extend({
       this.wipVote = {
         vote: 1,
         conversation_id: conversation_id,
+        weight: this.getWeight(),
         tid: tid
       };
       serverClient.addToVotesByMe(this.wipVote);
       this.onButtonClicked();
-      serverClient.disagree(tid, starred)
+      serverClient.disagree(tid, starred, this.wipVote.weight)
         .then(onVote.bind(this), onFail.bind(this));
     };
     this.participantPassed = function() {
@@ -449,11 +521,12 @@ module.exports = Handlebones.ModelView.extend({
       this.wipVote = {
         vote: 0,
         conversation_id: conversation_id,
+        weight: this.getWeight(),
         tid: tid
       };
       serverClient.addToVotesByMe(this.wipVote);
       this.onButtonClicked();
-      serverClient.pass(tid, starred)
+      serverClient.pass(tid, starred, this.wipVote.weight)
         .then(onVote.bind(this), onFail.bind(this));
     };
 
@@ -493,6 +566,8 @@ module.exports = Handlebones.ModelView.extend({
         return;
       }
       var starred = this.model.get("starred");
+      var weight = 0;
+
       var tid = this.wipVote.tid;
 
       function reloadPage() {
@@ -503,13 +578,13 @@ module.exports = Handlebones.ModelView.extend({
       }
 
       if (this.wipVote.vote === -1) {
-        serverClient.agree(tid, starred)
+        serverClient.agree(tid, starred, weight)
           .then(reloadPage, onFailAfterAuth);
       } else if (this.wipVote.vote === 0) {
-        serverClient.pass(tid, starred)
+        serverClient.pass(tid, starred, weight)
           .then(reloadPage, onFailAfterAuth);
       } else if (this.wipVote.vote === 1) {
-        serverClient.disagree(tid, starred)
+        serverClient.disagree(tid, starred, weight)
           .then(reloadPage, onFailAfterAuth);
       } else {
         alert(3);

@@ -11,6 +11,7 @@
   polis.on.doneVoting = polis.on.doneVoting || [];
   polis.on.write = polis.on.write || [];
   polis.on.resize = polis.on.resize || [];
+  polis.on.init = polis.on.init || [];
 
   function parseQueryParams(startToken, s) {
     if (typeof s !== "string") {
@@ -56,10 +57,11 @@
          ucsv: d.getAttribute("data-ucsv"),
          ucsf: d.getAttribute("data-ucsf"),
 
+         build: d.getAttribute("data-build"),
+
          ui_lang: d.getAttribute("data-ui_lang"),
 
          subscribe_type: d.getAttribute("data-subscribe_type"), // 0 for no prompt, 1 for email prompt (1 is default)
-
 
          // These config variables will be used to init the conversation.
          // Subsequent loads will not update to these values in our DB.
@@ -88,12 +90,19 @@
   function createPolisIframe(parent, o) {
     var iframe = document.createElement("iframe");
     var path = [];
-    if (o.demo) {
-      path.push("demo");
-    }
     o.parent_url = o.parent_url || window.location+"";
     var id = "polis_";
+    var paramStrings = [];
+
+    function appendIfPresent(name) {
+      if (o[name] !== null && o[name] !== void 0) {
+        paramStrings.push(name + "=" + encodeURIComponent(o[name]));
+      }
+    }
     if (o.conversation_id) {
+      if (o.demo) {
+        path.push("demo");
+      }
       path.push(o.conversation_id);
       id += o.conversation_id;
     } else if (o.site_id) {
@@ -105,29 +114,23 @@
       }
       path.push(o.page_id);
       id += "_" + o.page_id;
+      appendIfPresent("demo");
     } else {
       alert("Error: need data-conversation_id or data-site_id");
       return;
     }
     var src = polisUrl+ "/" + path.join("/");
-    var paramStrings = [];
-
-    function appendIfPresent(name) {
-      if (o[name] !== null) {
-        paramStrings.push(name + "=" + encodeURIComponent(o[name]));
-      }
-    }
 
     appendIfPresent("parent_url");
     if (o.parent_url) {
       paramStrings.push("referrer="+ encodeURIComponent(document.referrer));
     }
 
+    appendIfPresent("build");
+
     appendIfPresent("xid");
     appendIfPresent("x_name");
     appendIfPresent("x_profile_image_url");
-
-
     appendIfPresent("ucv");
     appendIfPresent("ucw");
     appendIfPresent("ucsh");
@@ -159,6 +162,7 @@
 
     iframe.src = src;
     iframe.width = "100%"; // may be constrained by parent div
+    iframe.style.maxWidth = window.innerWidth + "px";
     iframe.height = o.height || 930;
     iframe.style.border = o.border || "1px solid #ccc";
     iframe.style.borderRadius = o.border_radius || "4px";
@@ -221,8 +225,13 @@
         }));
       }
 
-      if (data === "cookieRedirect" && cookiesEnabledAtTopLevel()) {
-        // temporarily redirect to polis, which will set a cookie and redirect back
+      if (data && data.name === "init") {
+        for (var r = 0; r < polis.on.init.length; r++) {
+          polis.on.init[r](data);
+        }
+      }
+
+      if (data === "cookieRedirect" && cookiesEnabledAtTopLevel()) {//   // temporarily redirect to polis, which will set a cookie and redirect back
         window.location = polisUrl + "/api/v3/launchPrep?dest=" + encodeReturnUrl(window.location+"");
       }
       // if (data === "twitterConnectBegin") {

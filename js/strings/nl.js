@@ -1,4 +1,4 @@
-// Copyright (C) 2012-present, Polis Technology Inc. This program is free software: you can redistribute it and/or  modify it under the terms of the GNU Affero General Public License, version 3, as published by the Free Software Foundation. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY. without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details. You should have received a copy of the GNU Affero General Public License along with this program.  If not, see <http://www.gnu.org/licenses/>;
+// Copyright (C) 2012-present, The Authors. This program is free software: you can redistribute it and/or  modify it under the terms of the GNU Affero General Public License, version 3, as published by the Free Software Foundation. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY. without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details. You should have received a copy of the GNU Affero General Public License along with this program.  If not, see <http://www.gnu.org/licenses/>;
 
 var s = {};
 
@@ -31,6 +31,10 @@ s.helpWhatAmISeeing = "Mensen met een gelijkaardige mening zijn gegroepeerd. Kli
 s.helpWhatDoIDoTitle = "Wat moet ik doen?";
 s.helpWhatDoIDo = "Stem op andere reacties door op 'akkoord' of 'niet akkoord' te klikken. Schrijf een reactie (blijf kort en bondig, één idee per lijn). Nodig vrienden uit om deel te nemen aan de discussie!";
 s.writeCommentHelpText = "<strong>schrijf</strong> een reactie indien uw mening niet wordt vertegenwoordigd</i>";
+s.helpWriteListIntro = "Wat is een goed voorstel?";
+s.helpWriteListStandalone = "Een idee dat op zichzelf staat";
+s.helpWriteListRaisNew = "Kaart nieuwe perspectieven, ervaringen of problemen aan";
+s.helpWriteListShort = "Duidelijk en beknopt (beperkt tot 140 tekens)";
 s.heresHowGroupVoted = "Groep {{GROUP_NUMBER}} stemde:";
 s.one_person = "{{x}} persoon";
 s.x_people = "{{x}} personen";

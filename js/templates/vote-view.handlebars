@@ -1,4 +1,4 @@
-{{!-- Copyright (C) 2012-present, Polis Technology Inc. This program is free software: you can redistribute it and/or  modify it under the terms of the GNU Affero General Public License, version 3, as published by the Free Software Foundation. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details. You should have received a copy of the GNU Affero General Public License along with this program.  If not, see <http://www.gnu.org/licenses/>. --}}
+{{!-- Copyright (C) 2012-present, The Authors. This program is free software: you can redistribute it and/or  modify it under the terms of the GNU Affero General Public License, version 3, as published by the Free Software Foundation. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details. You should have received a copy of the GNU Affero General Public License along with this program.  If not, see <http://www.gnu.org/licenses/>. --}}
 
 
 <div id="comment_shower">
@@ -169,7 +169,7 @@
       <button style="
         margin-left: 55px;
         margin-bottom: 20px;
-      " id="showTranslationButtonVoteView">{{s.showTranslationButton}}</button>
+      " id="showTranslationButtonVoteView">{{showTranslationButton}}</button>
     {{/if}}
     {{#if showHideTranslationButton}}
       <button style="
@@ -182,7 +182,7 @@
       <p lang="{{translationLang}}" style="
         margin-left: 55px; {{!-- 10 + 36 + 5 from social above --}}
         font-weight: 400;
-        min-height: 65px;
+        min-height: 55px;
         position: relative;
         top: -13px;
         width: 70%;
@@ -192,6 +192,20 @@
       ">
         {{translationTxt}}
       </p>
+      {{#if thirdPartyTranslationDisclaimer }}
+        <p lang="{{translationLang}}" style="
+          margin-left: 55px; {{!-- 10 + 36 + 5 from social above --}}
+          position: relative;
+          top: -8px;
+          font-weight: 300;
+          width: 70%;
+          line-height: 1.3;
+          font-size: 14px;
+          {{customStyles}}
+        ">
+          {{thirdPartyTranslationDisclaimer}}
+        </p>
+      {{/if}}
     {{/if}}
     {{!-- {{createdString}} --}}
 
@@ -305,11 +319,25 @@
         {{s.pass}}
       </button>
     </div>
+
+    {{#if showImportantCheckbox}}
+    <div style="text-align: center; margin-bottom: 20px">
+      <label class="weight-label">
+        <span class="weight-radio"></span>
+        <input type="checkbox" name="checkbox" id="weight_high">
+        {{s.importantCheckbox}}
+      </label>
+    </div>
+    {{/if}}
+
   {{/if}} {{!-- /shouldMod --}}
 
 {{/if}} {{!-- /empty --}}
 
 
 {{/if}}  {{!-- /needSocial --}}
+
+
+<div id="hereIsNextStatementLabel" style="display: none" class="screen-reader-text" role="alert">{{s.hereIsNextStatement}}</div>
 
 </div> {{!-- /comment_shower div --}}

@@ -1,4 +1,4 @@
-// Copyright (C) 2012-present, Polis Technology Inc. This program is free software: you can redistribute it and/or  modify it under the terms of the GNU Affero General Public License, version 3, as published by the Free Software Foundation. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details. You should have received a copy of the GNU Affero General Public License along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// Copyright (C) 2012-present, The Authors. This program is free software: you can redistribute it and/or  modify it under the terms of the GNU Affero General Public License, version 3, as published by the Free Software Foundation. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details. You should have received a copy of the GNU Affero General Public License along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 /*jshint -W069 */
 
@@ -12,6 +12,7 @@ var Net = require("../util/net");
 var PTPOI_BID_OFFSET = 1e10;
 
 var polisPost = Net.polisPost;
+var polisPut = Net.polisPut;
 var polisGet = Net.polisGet;
 
 
@@ -53,6 +54,7 @@ module.exports = function(params) {
   var queryParticipantsByMetadataPath = "api/v3/query_participants_by_metadata";
 
   var ptptCommentModPath = "api/v3/ptptCommentMod";
+  var participants_extended_path = "api/v3/participants_extended";
 
   var xidsPath = "api/v3/xids";
 
@@ -87,7 +89,7 @@ module.exports = function(params) {
 
   // collections
   var votesByMe = params.votesByMe;
-  if (demoMode()) {
+  if (Utils.isDemoMode()) {
     votesByMe.trigger("change", votesByMe);
   }
 
@@ -124,10 +126,6 @@ module.exports = function(params) {
 
   var usePreloadMath = true;
   var usePreloadFamous = true;
-
-  function demoMode() {
-    return getPid() < 0;
-  }
 
   function removeEmptyBucketsFromClusters(clusters) {
     var buckets = projectionPeopleCache;
@@ -272,8 +270,7 @@ module.exports = function(params) {
       params.lang = Utils.uiLanguage();
     }
 
-    if (demoMode()) {
-      // DEMO_MODE
+    if (Utils.isDemoMode()) {
       params.without = votesByMe.pluck("tid");
     }
 
@@ -314,7 +311,7 @@ module.exports = function(params) {
   function submitComment(model) {
 
 
-    if (demoMode()) {
+    if (Utils.isDemoMode()) {
       return $.Deferred().resolve();
     }
 
@@ -350,9 +347,10 @@ module.exports = function(params) {
     }
   }
 
-  function disagree(commentId, starred) {
+  function disagree(commentId, starred, weight) {
     clearComment(commentId, "push");
     var o = {
+      weight: weight,
       vote: polisTypes.reactions.push,
       tid: commentId
     };
@@ -373,7 +371,7 @@ module.exports = function(params) {
       console.error("missing tid");
       console.error(params);
     }
-    if (demoMode()) {
+    if (Utils.isDemoMode()) {
       return getNextComment({
         notTid: params.tid // Also don't show the comment that was just voted on.
       }).then(function(c) {
@@ -406,7 +404,7 @@ module.exports = function(params) {
         processPidResponse(response.currentPid);
       }
       var c = response.nextComment;
-      if (c && c.translations) {
+      if (c && c.translations && c.translations.length) {
         c.translations = Utils.getBestTranslation(c.translations, Utils.uiLanguage());
       }
       return response;
@@ -415,9 +413,10 @@ module.exports = function(params) {
     return promise;
   }
 
-  function agree(commentId, starred) {
+  function agree(commentId, starred, weight) {
     clearComment(commentId);
     var o = {
+      weight: weight,
       vote: polisTypes.reactions.pull,
       tid: commentId
     };
@@ -427,9 +426,10 @@ module.exports = function(params) {
     return react(o);
   }
 
-  function pass(tid, starred) {
+  function pass(tid, starred, weight) {
     clearComment(tid);
     var o = {
+      weight: weight,
       vote: polisTypes.reactions.pass,
       tid: tid
     };
@@ -442,7 +442,7 @@ module.exports = function(params) {
   function trash(tid) {
     clearComment(tid, "trash");
 
-    if (demoMode()) {
+    if (Utils.isDemoMode()) {
       return $.Deferred().resolve();
     }
 
@@ -466,8 +466,7 @@ module.exports = function(params) {
       console.error(params);
     }
 
-    // DEMO_MODE
-    if (getPid() < 0) {
+    if (Utils.isDemoMode()) {
       return $.Deferred().resolve();
     }
 
@@ -640,7 +639,9 @@ module.exports = function(params) {
       if (ptptoiData.isSelf) {
         ptptoiData.picture_size = 48;
       } else {
-        console.error('missing picture_size', ptptoiData);
+
+        ptptoiData.picture_size = 48; // just set it for now
+        // console.error('missing picture_size', ptptoiData);
       }
     }
     var bucket = new Bucket({
@@ -1537,7 +1538,7 @@ module.exports = function(params) {
     people = people || [];
     people = _.clone(people); // shallow copy
 
-    // if(demoMode()) {
+    // if(Utils.isDemoMode()) {
     //     participantsOfInterestVotes[myPid] = {
     //         bid: -1,
     //         // created: "1416276055476"
@@ -2587,6 +2588,69 @@ module.exports = function(params) {
     });
   }
 
+  function getConsensus() {
+    if (!cachedPcaData) {
+      return [];
+    }
+    return cachedPcaData['consensus'];
+  }
+
+  function getGroupAwareConsensus() {
+    if (!cachedPcaData) {
+      return [];
+    }
+    return cachedPcaData['group-aware-consensus'];
+  }
+
+  function getGroupVotes(gid_or_all) {
+    if (!cachedPcaData) {
+      return {};
+    }
+    // for now add up all the vote counts across all groups since
+    // we don't have stats for that yet.
+    if (gid_or_all === "all") {
+      var x = {};
+      var gv = cachedPcaData["group-votes"];
+      _.each(gv, function(data, gid) {
+        _.each(data.votes, function(counts, tid) {
+          var z = x[tid] = x[tid] || {agreed:0, disagreed:0, saw:0};
+          z.agreed += counts.A;
+          z.disagreed += counts.D;
+          z.saw += counts.S;
+        });
+      });
+      return x;
+    }
+
+    return cachedPcaData["group-votes"][gid_or_all];
+  }
+
+  // function getTopTids(n) {
+  //   if (!cachedPcaData) {
+  //     return [];
+  //   }
+  //   var gac = cachedPcaData['group-aware-consensus'];
+  //   var allGacScores = _.map(gac, function(score, tid) {
+  //     return {
+  //       tid: Number(tid),
+  //       score: score,
+  //     };
+  //   });
+  //   allGacScores.sort(function(a, b) { return b.score - a.score;});
+  //   var topTids = _.map(allGacScores.slice(0, n), function(x) {
+  //     return x.tid;
+  //   });
+  //   return topTids;
+  // }
+
+  function put_participants_extended(params) {
+    params = $.extend(params, {
+      conversation_id: conversation_id,
+    });
+
+    return polisPut(participants_extended_path, params);
+  }
+
   return {
     addToVotesByMe: addToVotesByMe,
     authenticated: authenticated,
@@ -2604,6 +2668,10 @@ module.exports = function(params) {
     getReactionsToComment: getReactionsToComment,
     getPidToBidMapping: getPidToBidMappingFromCache,
     getMathMain: getMathMain,
+    // getTopTids: getTopTids,
+    getGroupAwareConsensus: getGroupAwareConsensus,
+    getConsensus: getConsensus,
+    getGroupVotes: getGroupVotes,
     disagree: disagree,
     agree: agree,
     pass: pass,
@@ -2638,6 +2706,7 @@ module.exports = function(params) {
     getParticipantsOfInterestForGid: getParticipantsOfInterestForGid,
     getParticipantsOfInterestIncludingSelf: getParticipantsOfInterestIncludingSelf,
     getPtptCount: getPtptCount,
+    put_participants_extended: put_participants_extended,
     updateMyProjection: updateMyProjection,
     shareConversationOnFacebook: shareConversationOnFacebook,
     shareConversationOnTwitter: shareConversationOnTwitter,

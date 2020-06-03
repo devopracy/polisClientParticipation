@@ -1,4 +1,4 @@
-// Copyright (C) 2012-present, Polis Technology Inc. This program is free software: you can redistribute it and/or  modify it under the terms of the GNU Affero General Public License, version 3, as published by the Free Software Foundation. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details. You should have received a copy of the GNU Affero General Public License along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// Copyright (C) 2012-present, The Authors. This program is free software: you can redistribute it and/or  modify it under the terms of the GNU Affero General Public License, version 3, as published by the Free Software Foundation. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details. You should have received a copy of the GNU Affero General Public License along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 var autosize = require("autosize");
 var constants = require("../util/constants");
@@ -44,6 +44,7 @@ module.exports = Handlebones.ModelView.extend({
     ctx.hasFacebook = userObject.hasFacebook;
     ctx.s = Strings;
     ctx.desktop = !display.xs();
+    ctx.hideHelp = !Utils.userCanSeeHelp() || preload.firstConv.help_type === 0;
 
     ctx.no_write_hint = false; //preload.firstConv.write_hint_type === 0;
 
@@ -52,6 +53,7 @@ module.exports = Handlebones.ModelView.extend({
       ctx.customBtnStyles = "background-color: " + btnBg + ";";
     }
     ctx.charLimitString = Strings.tipCharLimit.replace("{{char_limit}}", constants.CHARACTER_LIMIT);
+    ctx.is_anon = window.preload.firstConv.is_anon;
     return ctx;
   },
   hideMessage: function(id) {
@@ -110,6 +112,10 @@ module.exports = Handlebones.ModelView.extend({
 
     this.hideMessage("#comment_sent_message");
     this.hideMessage("#comment_send_failed_message");
+    this.hideMessage("#comment_send_failed_empty_message");
+    this.hideMessage("#comment_send_failed_too_long_message");
+    this.hideMessage("#comment_send_failed_duplicate_message");
+    this.hideMessage("#comment_send_failed_conversation_closed_message");
     var form =  $(arguments[0].target);
     var formText = form.val();
     var len = formText.length;
@@ -191,18 +197,23 @@ module.exports = Handlebones.ModelView.extend({
     var that = this;
     this.hideMessage("#comment_sent_message");
     this.hideMessage("#comment_send_failed_message");
+    this.hideMessage("#comment_send_failed_empty_message");
+    this.hideMessage("#comment_send_failed_too_long_message");
+    this.hideMessage("#comment_send_failed_duplicate_message");
+    this.hideMessage("#comment_send_failed_conversation_closed_message");
+
 
     function doSubmitComment() {
       if (that.buttonActive) {
         that.buttonActive = false;
         serialize(that, function(attrs){
           if (attrs.txt.length === 0) {
-            that.showMessage("#comment_send_failed_message");
+            that.showMessage("#comment_send_failed_empty_message");
             that.buttonActive = true;
             return;
           }
           if (attrs.txt.length > CHARACTER_LIMIT) {
-            that.showMessage("#comment_send_failed_message");
+            that.showMessage("#comment_send_failed_too_long_message");
             that.buttonActive = true;
             return;
           }
@@ -212,15 +223,15 @@ module.exports = Handlebones.ModelView.extend({
             that.showMessage("#comment_sent_message");
 
           }, function(err) {
-            that.showMessage("#comment_send_failed_message");
+            // that.showMessage("#comment_send_failed_message");
           }).always(function() {
             that.buttonActive = true;
           });
         });
       }
     }
-
-    var hasSocial = window.userObject.hasFacebook || window.userObject.hasTwitter;
+    var xid = Utils.getXid();
+    var hasSocial = window.userObject.hasFacebook || window.userObject.hasTwitter || !_.isUndefined(xid);
     var needsSocial = preload.firstConv.auth_needed_to_write;
     M.add(M.COMMENT_SUBMIT_CLICK);
     if (hasSocial || !needsSocial) {
@@ -321,21 +332,24 @@ module.exports = Handlebones.ModelView.extend({
           //   error: "Duplicate!",
           //   errorExtra: "That comment already exists.",
           // });
-          alert(Strings.commentErrorDuplicate);
+          // alert(Strings.commentErrorDuplicate);
+          that.showMessage("#comment_send_failed_duplicate_message");
         } else if (err.responseText === "polis_err_conversation_is_closed"){
 
           // that.model.set({
           //   error: "This conversation is closed.",
           //   errorExtra: "No further commenting is allowed.",
           // });
-          alert(Strings.commentErrorConversationClosed);
+          // alert(Strings.commentErrorConversationClosed);
+          that.showMessage("#comment_send_failed_conversation_closed_message");
         } else {
 
           // that.model.set({
           //   error: "Error sending comment.",
           //   errorExtra: "Please try again later.",
           // });
-          alert(Strings.commentSendFailed);
+          // alert(Strings.commentSendFailed);
+          that.showMessage("#comment_send_failed_message");
           // this.showMessage("#comment_send_failed_message");
         }
       });

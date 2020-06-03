@@ -1,4 +1,4 @@
-// Copyright (C) 2012-present, Polis Technology Inc. This program is free software: you can redistribute it and/or  modify it under the terms of the GNU Affero General Public License, version 3, as published by the Free Software Foundation. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details. You should have received a copy of the GNU Affero General Public License along with this program.  If not, see <http://www.gnu.org/licenses/>.
+// Copyright (C) 2012-present, The Authors. This program is free software: you can redistribute it and/or  modify it under the terms of the GNU Affero General Public License, version 3, as published by the Free Software Foundation. This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details. You should have received a copy of the GNU Affero General Public License along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 var _ = require('underscore');
 var Promise = require('bluebird');
@@ -51,9 +51,10 @@ var Stream = require('stream');
 var sys = require('sys');
 var url = require('url');
 
+var polisConfig = require('./polis.config');
 
 
-console.log("Uploader: " + process.env.UPLOADER);
+console.log("Uploader: " + polisConfig.UPLOADER);
 
 // WARNING: useJsHint gets mutated in watch builds
 var useJsHint = true;
@@ -105,7 +106,7 @@ function prepPathForTemplate(path) {
 gulp.task('connect', [], function() {
 
   function proxyToPreprod(req, response) {
-    var x = request("https://preprod.pol.is" + req.originalUrl);
+    var x = request((polisConfig.SERVICE_URL || "https://preprod.pol.is") + req.originalUrl);
     x.on("error", function(err) {
       response.status(500).end();
     });
@@ -186,8 +187,9 @@ gulp.task('connect', [], function() {
   app.use(/^\/wimp$/, express.static(path.join(destRootBase, "wimp.html")));
   app.use(/^\/try$/, express.static(path.join(destRootBase, "try.html")));
 
-  app.listen(5001);
-  console.log('localhost:5001');
+
+  app.listen(polisConfig.PORT);
+  console.log('listening on localhost:' + polisConfig.PORT);
 });
 
 function getGitHash() {
@@ -249,13 +251,16 @@ gulp.task('index', [
 ], function() {
   var s = gulp.src('index.html');
   var basepath = prepPathForTemplate(destRootRest);
+  var domainWhitelist = '["' + polisConfig.domainWhitelist.join('","') + '"]';
   if (devMode) {
     s = s.pipe(template({
       basepath: basepath,
       basepath_visbundle: basepath_visbundle_dev,
       d3Filename: 'd3.js',
-      useIntercom: !isTrue(process.env.DISABLE_INTERCOM),
+      fbAppId: polisConfig.FB_APP_ID,
+      useIntercom: !isTrue(polisConfig.DISABLE_INTERCOM),
       versionString: versionString,
+      domainWhitelist: domainWhitelist,
     }));
   } else {
     s = s.pipe(template({
@@ -263,11 +268,13 @@ gulp.task('index', [
       basepath: basepath, // proxy through server (cached by cloudflare, and easier than choosing a bucket for preprod, etc)
       basepath_visbundle: basepath,
       d3Filename: 'd3.min.js',
-      useIntercom: !isTrue(process.env.DISABLE_INTERCOM),
+      fbAppId: polisConfig.FB_APP_ID,
+      useIntercom: !isTrue(polisConfig.DISABLE_INTERCOM),
       versionString: versionString,
+      domainWhitelist: domainWhitelist,
     }));
   }
-  return s.pipe(gulp.dest(destRootBase));
+  return s.pipe(gulp.dest(destRootBase)).pipe(gulp.dest(destRoot())); // pipe to root to clobber current build, and also to cache-busted path to support loading old builds
 });
 
 gulp.task('templates', function(){
@@ -562,15 +569,15 @@ gulp.task("scriptsTemp", function() {
 gulp.task("preprodConfig", function() {
   preprodMode = true;
   minified = true;
-  scpSubdir = process.env.SCP_SUBDIR_PREPROD;
-  s3Subdir = process.env.S3_BUCKET_PREPROD;
+  scpSubdir = polisConfig.SCP_SUBDIR_PREPROD;
+  s3Subdir = polisConfig.S3_BUCKET_PREPROD;
 });
 
 gulp.task("prodConfig", function() {
   prodMode = true;
   minified = true;
-  scpSubdir = process.env.SCP_SUBDIR_PROD;
-  s3Subdir = process.env.S3_BUCKET_PROD;
+  scpSubdir = polisConfig.SCP_SUBDIR_PROD;
+  s3Subdir = polisConfig.S3_BUCKET_PROD;
 });
 
 gulp.task("unminifiedConfig", function() {
@@ -652,17 +659,19 @@ gulp.task("watchForDev", [
 });
 
 function notifySlackOfDeployment(env) {
+  var slackPath = '.polis_slack_creds.json';
+  if (fs.existsSync(slackPath)) {
+    var creds = JSON.parse(fs.readFileSync(slackPath));
 
-  var creds = JSON.parse(fs.readFileSync('.polis_slack_creds.json'));
-
-  getGitHash().then(function(hash) {
-    var slackToken = creds.apikey;
-    var message = "deploying to " + env +
-      "\n" + hash +
-      "\n" + new Date();
-    var url = "https://slack.com/api/chat.postMessage?token="+slackToken+"&channel=C02G773HT&text="+message+"&pretty=1";
-    request(url);
-  });
+    getGitHash().then(function(hash) {
+      var slackToken = creds.apikey;
+      var message = "deploying to " + env +
+        "\n" + hash +
+        "\n" + new Date();
+      var url = "https://slack.com/api/chat.postMessage?token="+slackToken+"&channel=C02G773HT&text="+message+"&pretty=1";
+      request(url);
+    });
+  }
 }
 
 gulp.task('prodBuildNoDeploy', [
@@ -678,12 +687,12 @@ gulp.task('deploy_TO_PRODUCTION', [
   notifySlackOfDeployment("prod");
 
   var uploader;
-  if ('s3' === process.env.UPLOADER) {
+  if ('s3' === polisConfig.UPLOADER) {
     uploader = s3uploader({
       bucket: s3Subdir,
     });
   }
-  if ('scp' === process.env.UPLOADER) {
+  if ('scp' === polisConfig.UPLOADER) {
     uploader = scpUploader({ // TODO needs to upload as prod somehow.
       // subdir: "cached",
       watch: function(client) {
@@ -696,20 +705,17 @@ gulp.task('deploy_TO_PRODUCTION', [
   return deploy(uploader);
 });
 
-gulp.task('deployPreprod', [
-  "preprodConfig",
-  "dist"
-], function() {
 
+function doUpload() {
   notifySlackOfDeployment("preprod");
 
   var uploader;
-  if ('s3' === process.env.UPLOADER) {
+  if ('s3' === polisConfig.UPLOADER) {
     uploader = s3uploader({
       bucket: s3Subdir,
     });
   }
-  if ('scp' === process.env.UPLOADER) {
+  if ('scp' === polisConfig.UPLOADER) {
     uploader = scpUploader({ // TODO needs to upload as PREprod somehow.
       // subdir: "cached",
       watch: function(client) {
@@ -720,21 +726,18 @@ gulp.task('deployPreprod', [
     });
   }
   return deploy(uploader);
-});
+}
+
+gulp.task('deployPreprod', [
+  "preprodConfig",
+  "dist"
+], doUpload);
 
 gulp.task('deployPreprodUnminified', [
   "preprodConfig",
   "unminifiedConfig",
   "dist"
-], function() {
-
-  notifySlackOfDeployment("preprod");
-
-  var uploader = s3uploader({
-    bucket: process.env.S3_BUCKET_PREPROD,
-  });
-  return deploy(uploader);
-});
+], doUpload);
 
 gulp.task('deploySurvey', [
   "prodConfig",

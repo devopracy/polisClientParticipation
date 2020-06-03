@@ -19,7 +19,11 @@
     <link rel="stylesheet" type="text/css" href="<%= basepath %>/css/polis.css"> <!-- proxy all CSS through server for respond.js -->
 
 
-    <script>window.preload = "REPLACE_THIS_WITH_PRELOAD_DATA";</script>
+    <script>
+      window.domainWhitelist = <%= domainWhitelist %>;
+      window.preload = "REPLACE_THIS_WITH_PRELOAD_DATA";
+      window.version = "<%= versionString %>";
+    </script>
     <style>
     .displaynone {
       display: none;
@@ -132,10 +136,20 @@ function getWindowSize() {
 // we don't have promises until main bundle loads, so this is going to be a bit messy.
 var p = window.preload;
 
+
+function fixupConversation(c) {
+  var t = c.translations
+  if (t && t.length) {
+    c.topic = t[0].topic;
+    c.description = t[0].description;
+  }
+  return c;
+}
+
 function onPreloadOk(response) {
   var things = [
     {src:"nextComment", dst:"firstComment", cb:"firstCommentListener"},
-    {src:"conversation", dst:"firstConv", cb:"firstConvListener"},
+    {src:"conversation", dst:"firstConv", cb:"firstConvListener", fn:fixupConversation},
     {src:"user", dst:"firstUser", cb:"firstUserListener"},
     {src:"ptpt", dst:"firstPtpt", cb:"firstPtptListener"},
     {src:"votes", dst:"firstVotesByMe", cb:"firstVotesByMeListener"},
@@ -147,6 +161,9 @@ function onPreloadOk(response) {
     var r = things[i], src = r.src, dst = r.dst, cb = r.cb;
     if (response) {
       p[dst] = r.JSON ? JSON.parse(response[src]) : response[src];
+    }
+    if (r.fn) {
+      p[dst] = r.fn(p[dst]);
     }
 
     // weird issue probably due to setting a prop named bgcolor on a global?
@@ -220,22 +237,22 @@ qp.push("pid=mypid");
 
 var xid = getXid();
 if (typeof xid !== "undefined") {
-  qp.push("xid=" + xid);
   window.preload.xid = xid;
+  qp.push("xid=" + encodeURIComponent(xid));
 }
 var x_profile_image_url = get_x_profile_image_url();
 if (typeof x_profile_image_url !== "undefined") {
   window.preload.x_profile_image_url = x_profile_image_url;
-  qp.push("x_profile_image_url=" + x_profile_image_url);
+  qp.push("x_profile_image_url=" + encodeURIComponent(x_profile_image_url));
 }
 var x_name = get_x_name();
 if (typeof x_name !== "undefined") {
   window.preload.x_name = x_name;
-  qp.push("x_name=" + x_name);
+  qp.push("x_name=" + encodeURIComponent(x_name));
 }
 var dwok = get_domain_whitelist_override_key();
 if (typeof dwok !== "undefined") {
-  qp.push("domain_whitelist_override_key=" + dwok);
+  qp.push("domain_whitelist_override_key=" + encodeURIComponent(dwok));
 }
 
 var ui_lang = getUiLang();
@@ -347,7 +364,7 @@ if (<%= useIntercom %>) {
 <script>
   window.fbAsyncInit = function() {
     FB.init({
-      appId      : '661042417336977',
+      appId      : '<%= fbAppId %>',
       xfbml      : true,
       version    : 'v2.1'
     });
@@ -386,14 +403,12 @@ if (<%= useIntercom %>) {
     </path>
   </svg>
 </p>
-<p id="badDomainMessage" class="HeadingC displaynone" style="text-align:center; margin: 40px;">This coversation can not be viewed from this domain.</p>
+<p id="badDomainMessage" class="HeadingC displaynone" style="text-align:center; margin: 40px;">This conversation can't be viewed from this domain. Contact the creator of the conversation to find out where you can access it.</p>
 
 <script>
   if (window.top !== window) {
     document.getElementById("mainSpinner").classList.add("hidden");
   }
-
-  window.version = "<%= versionString %>";
 
   if (window.ui_lang) {
     document.getElementsByTagName("body")[0].setAttribute("lang", ui_lang);
